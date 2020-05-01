@@ -1,0 +1,11 @@
+//For creating virtualenv with python3
+
+python3 -m venv mmsvenv --without-pip
+source mmsvenv/bin/activate
+curl https://bootstrap.pypa.io/get-pip.py | python3
+
+//For creating virtualenv with python
+
+python -m venv mmsvenv --without-pip
+source mmsvenv/bin/activate
+curl https://bootstrap.pypa.io/get-pip.py | python

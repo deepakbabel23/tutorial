@@ -1,0 +1,34 @@
+sess1.graph._functions	//OrderedDict
+sess1.graph._functions['FunctionWithStatefulOp_FpvsclglmTc'].stateful_ops
+
+sess1.graph_def.library.function[0].signature.is_stateful
+final_graph_def.library.function
+
+fun1.definition.signature.is_stateful// in case of function
+op[0].op.op_def.is_stateful //spop.py
+spop[0].op.op_def.is_stateful
+
+Rewrite Sub Graph
+https://programtalk.com/python-examples/tensorflow.python.framework.function.Defun/
+
+assign_e_to_v.op.op_def.is_stateful //read_variable_op(tf.Variable)
+assign_e_to_v ==> is the operator which might get passed to StatefulPartitionedCall
+
+op[0].op.op_def.is_stateful //function
+
+s.graph._functions.'func1_Kij76G3nkcE' (140421443214480).stateful_ops
+
+v.op.op_def.is_stateful //ReadVariable op
+assign_e_to_v.op.op_def.is_stateful //AssignVariable op
+
+
+from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToJson
+
+*** https://github.com/tensorflow/tensorflow/blob/6f90ede2496134777a948fea872b17a67b4f6ef2/tensorflow/python/client/session_test.py#L913 ***
+*** https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/framework/function_test.py ***
+https://github.com/tensorflow/tensorflow/issues/1344#issuecomment-210641516
+https://github.com/tensorflow/tensorflow/issues/1344
+https://www.programcreek.com/python/example/90262/tensorflow.ConfigProto
+https://medium.com/@liyin2015/tensorflow-cpus-and-gpus-configuration-9c223436d4ef
+*** https://arxiv.org/pdf/1603.04467.pdf ***

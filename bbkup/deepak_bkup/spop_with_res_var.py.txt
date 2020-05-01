@@ -1,0 +1,51 @@
+import tensorflow as tf
+from tensorflow.core.protobuf import config_pb2
+from tensorflow.python.framework import function
+from tensorflow.python.framework import ops
+
+def testCapture():
+  g = tf.Graph()
+  with g.as_default():
+    w = tf.Variable(tf.constant([[1.0]]))
+    b = tf.Variable(tf.constant([2.0]))
+
+    # Foo() captures w and b.
+    @function.Defun(tf.float32)
+    def Foo(x):
+
+      # Plus() captures b.
+      @function.Defun(tf.float32)
+      def Plus(y):
+        with ops.device("/job:localhost/replica:0/task:0/device:CPU:0"):
+          return y + b
+
+      with ops.device("/job:localhost/replica:0/task:0/device:CPU:0"):
+        return Plus(tf.matmul(w, x))
+
+    y = Foo(tf.constant([[10.]]))
+
+  with tf.Session(config=config_pb2.ConfigProto(device_count={"CPU": 2}),graph=g) as sess:
+    print(sess.run(tf.global_variables_initializer()))
+    print(y.eval() == [[10.0]])
+    print("hi")
+    # self.assertAllEqual(y.eval(), [[12.0]])
+
+tc = testCapture()
+
+def testVar():
+
+  @function.Defun(tf.float32)
+  def Foo(x):
+    return x * x + 1
+
+  g = tf.Graph()
+  with g.as_default():
+    v = tf.Variable(tf.constant(10.0))
+    z = Foo(v)
+  Foo._signature.is_stateful = True
+  with tf.Session(config=config_pb2.ConfigProto(device_count={"CPU": 2}),graph=g) as sess:
+    sess.run(tf.global_variables_initializer())
+    print(z.eval())
+    print(z.eval() == 101.)
+
+tc = testVar()

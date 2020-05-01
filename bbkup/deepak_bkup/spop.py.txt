@@ -1,0 +1,91 @@
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import function
+from tensorflow.python.framework import ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import random_ops
+from tensorflow.python.framework import constant_op
+from tensorflow.core.protobuf import config_pb2
+from tensorflow.core.protobuf import rewriter_config_pb2
+from tensorflow.python.client import session
+from tensorflow.python.framework import test_util
+from tensorflow.python.platform import test
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import variables
+import numpy as np
+
+import tensorflow as tf
+
+def convert_to_list(x):
+    if not isinstance(x, list):
+        x = [x]
+    return x
+
+def run_tf_graph(sess, input_data, input_node, output_node):
+    """ Generic function to execute tensorflow """
+    input_data = convert_to_list(input_data)
+    input_node = convert_to_list(input_node)
+    output_node = convert_to_list(output_node)
+
+    tensor = [sess.graph.get_tensor_by_name(
+        output_name) for output_name in output_node]
+
+    input_dict = {e: input_data[i] for i, e in enumerate(input_node)}
+
+    output_data = sess.run(tensor, input_dict)
+    return output_data
+
+tf.reset_default_graph()
+data = np.random.uniform(size=(32, 100)).astype('float32')
+input_tensor = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
+print(type(input_tensor))
+
+size = input_tensor.shape.dims[1]
+var_data = np.random.uniform(-5, 5, size=[size, size]).astype(np.float32)
+input_var = tf.Variable(var_data, name='var1', use_resource=True)
+print(type(input_var))
+math_ops.matmul(input_tensor, input_var)
+
+out_name = ['MatMul:0']
+out_node = ['MatMul']
+in_name = ['Placeholder:0']
+in_node = ['Placeholder']
+in_data = [data]
+
+@function.Defun(*[dtypes.float32] * 2)
+def FunctionWithStatefulOp(m,n):
+    with ops.device("/job:localhost/replica:0/task:0/device:CPU:0"):
+        mm = tf.Variable([1])
+        x = random_ops.random_uniform([4], maxval=10.0, dtype=dtypes.float32)
+    with ops.device("/job:localhost/replica:0/task:0/device:CPU:0"):
+        y = random_ops.random_uniform([4], maxval=10.0, dtype=dtypes.float32)
+        # math_ops.matmul(input_tensor, input_var)
+    return x+y
+
+# FunctionWithStatefulOp._signature.is_stateful = True
+
+op = tf.raw_ops.StatefulPartitionedCall(args=[constant_op.constant(1.), constant_op.constant(2.)], Tout=[dtypes.float32], f=FunctionWithStatefulOp)
+
+with tf.Session(config=config_pb2.ConfigProto(device_count={"CPU": 2})) as sess:
+    sess.run(variables.global_variables_initializer())
+
+    final_graph_def = sess.graph.as_graph_def(add_shapes=True)
+    tf_output = run_tf_graph(sess, in_data, in_name, out_name)
+    #
+    shape_dict = {e: i.shape for e, i in zip(in_name, in_data)}
+    print("hi")
+    print(sess.run(op))
+    for fun in sess.graph._functions.keys():
+        print(sess.graph._functions[fun].stateful_ops)
+    print(op)
+    # with pytest.raises(Exception) as exexcinfo:
+    #sess.graph_def     mod, params = relay.frontend.from_tensorflow(final_graph_def,
+    #                                                  layout=None,
+    #                                                  shape=shape_dict,
+    #                                                  outputs=None)
+
+
+# sess1 = tf.InteractiveSession(config=config_pb2.ConfigProto(device_count={"CPU": 2}))
+# print(sess1.run(op))
+# for fun in sess1.graph._functions.keys():
+#     print(sess1.graph._functions[fun].stateful_ops)
+# print(op)

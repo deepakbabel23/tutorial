@@ -1,0 +1,67 @@
+multimodal server github - register your trained models which can be served(inferenced), standalone http res server using curl
+train, deploy and serve
+
+deploy
+Register your pretrained model from any DL Framework
+Custom Handler to register model
+Model archiver - Model archive file
+installed with mms(model archive)
+MAR file created with model archiver can be placed anywhere(pretrained model details, custom handler for that model)
+
+Register/Update/Unregister - Load Model or not(Register)
+worker - how many workers will start inferencing
+backend - python interpreter
+
+Register/Update/Unregister - Mgmt API ( Rest API + Mgmt api)
+Inferencing API(Various flavours) - Backend is a Python process, managed by worker threads
+
+git mode in tensorflow for production(deploy) (model + library)
+mms next
+
+POC mms next
+1)Barebone front-end in drogon C++(http communication library) rest API with latest C++ support. Model registration
+2)MAR file. Unzipping MAR file using system level calls
+
+Backend with C++ - pytorch, tensorflow git models(DHANI), dlr-c++(MANOJ)
+Structure the two github repos together
+
+Backend with Python
+Single interpreter in Python process from main thread.
+numpy python interpreter problem
+popen a Python "main file" with c++.
+Now two processes
+Python process	C++ thread
+IPC between these two like:
+Pipe
+sockets not working
+
+Python file starts the python interpreter
+HTTP communication between C++ and Python file
+Model - Socket number
+netty - java library(http server setup, tcp server setup, event driven library) similar like drogon C++ library
+channels(socket communication)
+http server in python
+
+Drogon callback - when callback happens(taskcpp job mgmt, spin thread)
+context, channel - main thread blocked
+release event handler thread
+remembers front end socket
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

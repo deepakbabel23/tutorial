@@ -1,0 +1,202 @@
+record_gradient
+tape records - state of variable/gradient of variable
+readvariable op - records tape of the variable
+gradient - partial derivative of each parameter with respect to the loss
+
+
+StatefulPartitionedCall
+
+REGISTER_KERNEL_BUILDER(Name("StatefulPartitionedCall").Device(DEVICE_CPU),
+                        PartitionedCallOp);
+REGISTER_KERNEL_BUILDER(Name("StatefulPartitionedCall").Device(DEVICE_GPU),
+                        PartitionedCallOp);
+
+//As compared to PartitionedCall operator registration, we call SetIsStateful() API
+REGISTER_OP("StatefulPartitionedCall")
+    .Input("args: Tin")
+    .Output("output: Tout")
+    .Attr("Tin: list(type) >= 0")
+    .Attr("Tout: list(type) >= 0")
+    .Attr("f: func")
+    .Attr("config: string = ''")  // Deprecated in favor of config_proto
+    .Attr("config_proto: string = ''")
+    .Attr("executor_type: string = ''")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::UnknownShape);
+
+class OpKernel
+
+class OpKernelContext {
+struct Params 
+	{
+	FunctionLibraryRuntime* function_library;	
+	}
+FunctionLibraryRuntime* function_library() const 
+	{
+    	return params_->function_library;
+	}
+void set_output(int index, const Tensor& tensor);
+gtl::InlinedVector<TensorValue, 4> outputs_;
+
+op {
+  name: "StatefulPartitionedCall"
+  input_arg {
+    name: "args"
+    type_list_attr: "Tin"
+  }
+  output_arg {
+    name: "output"
+    type_list_attr: "Tout"
+  }
+  attr {
+    name: "Tin"
+    type: "list(type)"
+    has_minimum: true
+  }
+  attr {
+    name: "Tout"
+    type: "list(type)"
+    has_minimum: true
+  }
+  attr {
+    name: "f"
+    type: "func"
+  }
+  attr {
+    name: "config"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  attr {
+    name: "config_proto"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  attr {
+    name: "executor_type"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  is_stateful: true
+}
+
+class PartitionedCallOp : public AsyncOpKernel {
+ public:
+  explicit PartitionedCallOp(OpKernelConstruction* ctx);
+
+  ~PartitionedCallOp() override;
+
+  void ComputeAsync(OpKernelContext* ctx, DoneCallback done) override;
+
+ private:
+  Status FillOutputDevices(const FunctionLibraryRuntime& lib,
+                           const Device& cpu_device, AttrSlice attrs,
+                           FunctionLibraryRuntime::InstantiateOptions* opts);
+
+  Status Instantiate(FunctionLibraryRuntime* lib, OpKernelContext* ctx,
+                     std::vector<Tensor>* inputs,
+                     FunctionLibraryRuntime::Handle* handle);
+
+  void RunFunction(FunctionLibraryRuntime::Handle handle,
+                   const std::vector<Tensor>& inputs,
+                   FunctionLibraryRuntime* lib, OpKernelContext* ctx,
+                   DoneCallback done);
+
+  // Using unique pointers to avoid including proto headers in kernel headers
+  std::unique_ptr<NameAttrList> func_;
+  std::unique_ptr<ConfigProto> config_proto_;
+  string executor_type_;
+  mutex mu_;
+  // Cache the handle per FLR because this kernel may be instantiated for
+  // a stateful op, different invocations of it may use different FLRs.
+  // Different device placements of PartitionedCallOp also use
+  // different FLRs.
+  gtl::FlatMap<FunctionLibraryRuntime*, FunctionLibraryRuntime::Handle> handles_
+      GUARDED_BY(mu_);
+};
+
+//ComputeAysnc => Instantiate(will collect inputs from "args")
+Instantiate() => FillOutputDevices()
+ComputeAsync() => RunFunction()
+
+class FunctionLibraryRuntimeImpl : public FunctionLibraryRuntime {
+...
+
+bool FunctionLibraryRuntimeImpl::IsLocalTarget(
+    const InstantiateOptions& options) const {
+  if (device_ == nullptr) return true;
+  if (options.target.empty()) return true;
+  if (options.is_multi_device_function) return false;
+  Device* target_device;
+  if (!device_mgr_->LookupDevice(options.target, &target_device).ok()) {
+    VLOG(1) << "Not instantiating function in FLR because failed to "
+            << "find device " << options.target << " in device manager";
+    return false;
+  }
+  if (target_device != device_) {
+    VLOG(1) << "Not instantiating function in FLR because target device "
+            << options.target
+            << " is different from FLR's device: " << device_->DebugString();
+    return false;
+  }
+  return true;
+}
+...
+}
+ProcessFunctionLibraryRuntime
+{
+	friend class FunctionLibraryRuntimeImpl;
+}
+
+//////////////////////////////////////////
+
+op {
+  graph_op_name: "StatefulPartitionedCall"
+  in_arg {
+    name: "args"
+    description: "A list of input tensors."
+  }
+  out_arg {
+    name: "output"
+    description: "A list of return values."
+  }
+  attr { name: "Tin"  description: "A list of input types." }
+  attr { name: "Tout"  description: "A list of output types." }
+  attr {
+    name: "f"
+    description: <<END
+      A function that takes 'args', a list of tensors, and returns 'output',
+      another list of tensors. Input and output types are specified by 'Tin'
+      and 'Tout'. The function body of f will be placed and partitioned across
+      devices, setting this op apart from the regular Call op. This op is
+      stateful.
+END
+  }
+  summary: "returns `f(inputs)`, where `f`'s body is placed and partitioned."
+}
+
+/////////////////////////////////////////
+
+https://github.com/tensorflow/tensorflow/blob/66c48046f169f3565d12e5fea263f6d731f9bfd2/tensorflow/python/framework/convert_to_constants_test.py <https://github.com/tensorflow/tensorflow/blob/66c48046f169f3565d12e5fea263f6d731f9bfd2/tensorflow/python/framework/convert_to_constants_test.py>
+
+Rahul Kulhalli, 5:59 PM
+@tf.function
+def add(a, b):
+return a + b
+a = tf.Variable(1.)
+b = tf.Variable(-3.5)
+print(type(add(+b))
+<tf.Variable>
+
+
+//Useful Model Links
+	https://chromium.googlesource.com/external/github.com/tensorflow/tensorflow/+/r0.10/tensorflow/g3doc/how_tos/tool_developers/index.md
+https://medium.com/analytics-vidhya/deploying-tensorflow-2-1-as-c-c-executable-1d090845055c
+https://github.com/tensorflow/tensorflow/blob/3ca9c8f82078a7d1a691bcaa42021022252a680e/tensorflow/compiler/mlir/tensorflow/tests/graphdef2mlir/graph-as-function.pbtxt
+https://github.com/tensorflow/docs/blob/master/site/en/r1/guide/eager.ipynb
